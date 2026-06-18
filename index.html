@@ -1286,6 +1286,12 @@ async function updateSubmissionStatus(docId, status) {
   await updateDoc(doc(db, COLLECTION_NAME, docId), { status })
 }
 
+async function updateDeliveryLink(docId, deliveryLink) {
+  await waitForFirebase()
+  const { db, doc, updateDoc } = window.fb
+  await updateDoc(doc(db, COLLECTION_NAME, docId), { deliveryLink })
+}
+
 async function deleteAllSubmissions() {
   await waitForFirebase()
   const { db, collection, getDocs, doc, deleteDoc } = window.fb
@@ -1573,11 +1579,21 @@ async function renderAdminPanel(filter=''){
         <option value="delivered" ${s.status==='delivered'?'selected':''}>✅ Delivered</option>
       </select></td>
     </tr>
-    <tr><td colspan="7" style="padding:0 16px 12px"><div style="font-size:12px;color:var(--b300);line-height:1.6">
+    <tr><td colspan="7" style="padding:0 16px 14px"><div style="font-size:12px;color:var(--b300);line-height:1.6">
       <strong style="color:rgba(255,255,255,.5)">Message:</strong> ${s.message.substring(0,120)}${s.message.length>120?'...':''} &nbsp;|&nbsp;
       <strong style="color:rgba(255,255,255,.5)">Timeline:</strong> ${s.timeline} &nbsp;|&nbsp;
       <strong style="color:rgba(255,255,255,.5)">Contact:</strong> ${s.contact}
-    </div></td></tr>`).join('')
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <span style="font-size:11px;color:rgba(255,255,255,.5);white-space:nowrap">📦 Delivery Link:</span>
+      <input id="dl-${s._docId}" type="text" placeholder="Paste Google Drive / Dropbox link here..." value="${s.deliveryLink||''}"
+        style="flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);color:#fff;padding:6px 10px;border-radius:7px;font-size:11px;outline:none;font-family:var(--ff-m)"
+        onkeydown="if(event.key==='Enter')saveDeliveryLink('${s._docId}')"
+      />
+      <button onclick="saveDeliveryLink('${s._docId}')" style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">💾 Save</button>
+      ${s.deliveryLink?`<a href="${s.deliveryLink}" target="_blank" style="background:rgba(0,212,255,.15);color:#00d4ff;border:1px solid rgba(0,212,255,.3);padding:6px 12px;border-radius:7px;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap">🔗 View</a>`:''}
+    </div>
+    </td></tr>`).join('')
   }</tbody></table>`
 }
 async function updateStatus(docId,status){
@@ -1587,6 +1603,28 @@ async function updateStatus(docId,status){
     if (sub) sub.status = status
   } catch (err) {
     alert('Failed to update status. Please try again.')
+    console.error(err)
+  }
+}
+
+async function saveDeliveryLink(docId){
+  const input = document.getElementById('dl-'+docId)
+  if(!input) return
+  const link = input.value.trim()
+  const btn = input.nextElementSibling
+  const orig = btn.innerHTML
+  btn.innerHTML = '⏳'
+  btn.disabled = true
+  try {
+    await updateDeliveryLink(docId, link)
+    const sub = allSubsCache.find(s => s._docId === docId)
+    if (sub) sub.deliveryLink = link
+    btn.innerHTML = '✅'
+    setTimeout(()=>{ btn.innerHTML = orig; btn.disabled = false }, 1500)
+  } catch (err) {
+    alert('Failed to save delivery link. Please try again.')
+    btn.innerHTML = orig
+    btn.disabled = false
     console.error(err)
   }
 }
@@ -1871,6 +1909,7 @@ function renderPortal(subs){
           <div class="sub-detail">Preferred contact: <span>${s.contact}</span></div>
         </div>
         <div class="sub-status-bar">${steps.map((step,i)=>`<div class="sub-step"><div class="sub-step-dot ${i<ci?'done':i===ci?'active':'pending'}">${i<ci?'✓':step.icon}</div><div class="sub-step-label">${step.label}</div></div>`).join('')}</div>
+        ${s.deliveryLink ? `<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--g100)"><a href="${s.deliveryLink}" target="_blank" style="display:inline-flex;align-items:center;gap:9px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:11px 22px;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;box-shadow:0 4px 16px rgba(16,185,129,.35);transition:all .25s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">📥 Download Delivery File</a><p style="font-size:11px;color:var(--g400);margin-top:8px">Your project has been delivered! Click above to access your files.</p></div>` : ''}
       </div>`
     }).join('')}
   `
